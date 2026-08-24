@@ -74,11 +74,10 @@ class _AirLostPageState extends State<AirLostPage> {
             ],
           );
 
-          // Landscape: do not wrap the button in SafeArea and centre
-          // horizontally, so the notch inset does not shift the visual
-          // centre off (`gray_flow_lessons.md` §9).
-          if (landscape) return content;
-          return SafeArea(child: content);
+          // No SafeArea wrapper — the no-wifi screen sits edge-to-edge,
+          // like the notify screen.  Only the WebView (RidgePortal) gets
+          // a SafeArea around the actual site content.
+          return content;
         },
       ),
     );

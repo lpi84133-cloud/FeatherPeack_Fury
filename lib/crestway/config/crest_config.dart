@@ -66,17 +66,17 @@ abstract final class CrestConfig {
   // Wait before re-reading attribution via the GCD API when the SDK
   // reports Organic on the first callback (paid installs sometimes race
   // to this verdict on cold boot).  See `_takeInstall` in `flight_signals`.
-  static const int organicRecheckSeconds = 5;
-  static const Duration configPostTimeout = Duration(seconds: 18);
-  static const Duration gcdLookupTimeout = Duration(seconds: 9);
+  static const int organicRecheckSeconds = 3;
+  static const Duration configPostTimeout = Duration(seconds: 11);
+  static const Duration gcdLookupTimeout = Duration(seconds: 6);
   // Must cover: initial SDK callback + organicRecheckSeconds + gcdLookupTimeout
   // with a small safety margin.  Bump this together with the two above.
-  static const Duration awaitSignalsTimeout = Duration(seconds: 17);
+  static const Duration awaitSignalsTimeout = Duration(seconds: 12);
   static const Duration attPromptDelay = Duration(milliseconds: 420);
   static const int redirectRetryLimit = 2;
   static const int apnsPollAttempts = 6;
   static const Duration apnsPollStep = Duration(milliseconds: 620);
-  static const Duration postFinishedResizeDelay = Duration(milliseconds: 1050);
+  static const Duration postFinishedResizeDelay = Duration(milliseconds: 480);
   static const List<int> reflowSchedule = <int>[55, 190, 380, 620, 940];
   static const Duration coldViewportSettle = Duration(milliseconds: 360);
   static const int savedUrlExpiryDays = 5;

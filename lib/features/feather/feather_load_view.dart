@@ -8,6 +8,7 @@ import '../../core/design/fp_images.dart';
 import '../../core/design/fp_tokens.dart';
 import '../../core/design/fp_typography.dart';
 import '../../data/providers.dart';
+import '../../domain/calc/fury_zones.dart';
 import '../../domain/calc/load_breakdown.dart';
 import '../../domain/calc/trip_analysis.dart';
 import '../../domain/models/trip.dart';
@@ -132,6 +133,7 @@ class FeatherLoadView extends ConsumerWidget {
                 ],
               ),
             ),
+            _WaterCard(analysis: analysis),
             if (load.totalKg == 0) ...[
               const SizedBox(height: FpSpace.md),
               FpCard(
@@ -240,6 +242,119 @@ class FeatherLoadView extends ConsumerWidget {
             foregroundColor: Colors.white,
             tooltip: 'Add gear item',
             child: const Icon(Icons.add_rounded),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Water recommendation derived from the same 0.4 L/person/hour constant that
+/// Fury Zones uses, displayed as a progress bar so the user can see at a glance
+/// whether the volume they entered covers the trip.
+class _WaterCard extends ConsumerWidget {
+  const _WaterCard({required this.analysis});
+
+  final TripAnalysis analysis;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final trip = analysis.trip;
+    final hours = trip.movingHours;
+    if (hours == null || hours <= 0) return const SizedBox.shrink();
+
+    final format = ref.watch(formatProvider);
+    final recommended =
+        FuryResult.waterPerPersonPerHourLitres * hours * trip.people;
+    final entered = trip.waterLitres ?? 0.0;
+    final share = (entered / recommended).clamp(0.0, 1.0);
+
+    // 10 % tolerance so a litre rounded down does not look alarming.
+    final isOk = entered >= recommended * 0.9;
+    final hasEntry = trip.waterLitres != null && trip.waterLitres! > 0;
+
+    final Color barColor;
+    final String verdict;
+    if (!hasEntry) {
+      barColor = FpColors.outlineStrong;
+      verdict = 'Not entered';
+    } else if (isOk) {
+      barColor = FpColors.skyDeep;
+      verdict = 'Looks good';
+    } else {
+      barColor = FpColors.hard;
+      verdict = 'Below estimate';
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: FpSpace.md),
+        const FpSectionHeader(label: 'Water'),
+        const SizedBox(height: FpSpace.xs),
+        FpCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('RECOMMENDED', style: FpTypography.overline),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Text(
+                            format.volume(recommended),
+                            style: FpTypography.metric,
+                          ),
+                        ],
+                      ),
+                      Text(
+                        '${format.volume(FuryResult.waterPerPersonPerHourLitres)}'
+                        '/person/h · ${hours.toStringAsFixed(1)} h'
+                        ' · ${trip.people}'
+                        ' ${trip.people == 1 ? 'person' : 'people'}',
+                        style: FpTypography.caption,
+                      ),
+                    ],
+                  ),
+                  const Spacer(),
+                  const FpArt(FpImages.gearBottle, size: 48, height: 62),
+                ],
+              ),
+              const SizedBox(height: FpSpace.sm),
+              FpShareBar(share: share, color: barColor, height: 6),
+              const SizedBox(height: FpSpace.xs),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      hasEntry
+                          ? 'Entered: ${format.volume(trip.waterLitres)}'
+                          : 'No volume entered yet',
+                      style: FpTypography.caption,
+                    ),
+                  ),
+                  FpTag(label: verdict, color: barColor),
+                ],
+              ),
+              if (!isOk || !hasEntry) ...[
+                const SizedBox(height: FpSpace.sm),
+                OutlinedButton.icon(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => CreateTripScreen(existing: trip),
+                    ),
+                  ),
+                  icon: const Icon(Icons.water_drop_outlined, size: 18),
+                  label: const Text('Set water volume'),
+                ),
+              ],
+            ],
           ),
         ),
       ],

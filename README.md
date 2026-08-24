@@ -1,17 +1,25 @@
-# featherpeakfurygame
+# Featherpeak Fury
 
-Offline hiking trip preparation and load planning utility
+Offline hiking trip preparation and load planning utility. Plan routes,
+calculate pack weight, track gear checklists and elevation gain — all
+without a network connection.
+
+## Features
+
+- Route sketchpad with elevation and distance summaries.
+- Load planner: per-item weight, pack totals and warnings for overload.
+- Gear checklists that persist across trips.
+- Trip journal with photo covers.
+- Fully offline; no account required.
 
 ## Getting Started
 
-This project is a starting point for a Flutter application.
+Install Flutter (3.24 or newer) and run:
 
-A few resources to get you started if this is your first Flutter project:
+```bash
+flutter pub get
+flutter run
+```
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+iOS deployment target is 15.0. Firebase and AppsFlyer keys live in the
+platform config files; see `ios/Runner/GoogleService-Info.plist`.

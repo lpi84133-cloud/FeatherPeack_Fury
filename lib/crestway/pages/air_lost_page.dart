@@ -1,0 +1,128 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+// Offline / unreachable-endpoint screen.  Uses the delivered artwork in
+// both orientations.  Retry re-runs the whole pipeline through this
+// page's OWN Navigator (never a captured parent state — the previous
+// gate route was `pushReplacement`d away, see
+// `gray_flow_lessons.md` §3).
+class AirLostPage extends StatefulWidget {
+  const AirLostPage({super.key, required this.retryPageBuilder});
+
+  final WidgetBuilder retryPageBuilder;
+
+  @override
+  State<AirLostPage> createState() => _AirLostPageState();
+}
+
+class _AirLostPageState extends State<AirLostPage> {
+  @override
+  void initState() {
+    super.initState();
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+  }
+
+  void _retry() {
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: widget.retryPageBuilder),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0E2206),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final landscape = constraints.maxWidth > constraints.maxHeight;
+          final art = landscape
+              ? 'assets/crestway/nowifi_landscape.webp'
+              : 'assets/crestway/nowifi_portrait.webp';
+          final button = _RetryButton(
+            onPressed: _retry,
+            compact: landscape,
+          );
+
+          final content = Stack(
+            fit: StackFit.expand,
+            children: [
+              Image.asset(
+                art,
+                fit: BoxFit.cover,
+                filterQuality: FilterQuality.high,
+              ),
+              const DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Color(0x00000000), Color(0xB3000000)],
+                  ),
+                ),
+              ),
+              Align(
+                alignment: landscape
+                    ? const Alignment(0, 0.55)
+                    : const Alignment(0, 0.72),
+                child: button,
+              ),
+            ],
+          );
+
+          // Landscape: do not wrap the button in SafeArea and centre
+          // horizontally, so the notch inset does not shift the visual
+          // centre off (`gray_flow_lessons.md` §9).
+          if (landscape) return content;
+          return SafeArea(child: content);
+        },
+      ),
+    );
+  }
+}
+
+class _RetryButton extends StatelessWidget {
+  const _RetryButton({required this.onPressed, required this.compact});
+
+  final VoidCallback onPressed;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = MediaQuery.of(context).size.width *
+            (compact ? 0.35 : 0.70);
+        return SizedBox(
+          width: width,
+          height: compact ? 52 : 60,
+          child: ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFE7A924),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(30),
+              ),
+            ),
+            onPressed: onPressed,
+            child: const Text(
+              'Try again',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                height: 1.0,
+                letterSpacing: 0.2,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}

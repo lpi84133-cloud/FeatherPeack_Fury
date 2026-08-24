@@ -64,6 +64,14 @@ class _RidgePortalState extends State<RidgePortal>
       ..enableZoom(false)
       ..setNavigationDelegate(_delegate);
 
+    // Enable WKWebView's native left-edge swipe to go back / right-edge
+    // swipe to go forward.  Without this, the WebView eats the gesture
+    // and the user has no way back through the redirect chain.
+    final platform = _controller.platform;
+    if (platform is WebKitWebViewController) {
+      platform.setAllowsBackForwardNavigationGestures(true);
+    }
+
     if (widget.coldStartPush) {
       _settleColdViewport();
     } else {

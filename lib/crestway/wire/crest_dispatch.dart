@@ -26,6 +26,10 @@ class CrestDispatch {
       req.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
       req.headers.set(HttpHeaders.userAgentHeader, userAgent);
       req.headers.set(HttpHeaders.acceptHeader, 'application/json');
+      // Partner identity as request headers (belt-and-suspenders with the
+      // UA suffix — the same convention Joker-Lantern uses successfully).
+      req.headers.set('X-Partner-App-Id', CrestConfig.bundleId);
+      req.headers.set('X-Partner-App-Name', 'Featherpeak Fury');
       req.write(jsonEncode(body));
       final response =
           await req.close().timeout(CrestConfig.configPostTimeout);

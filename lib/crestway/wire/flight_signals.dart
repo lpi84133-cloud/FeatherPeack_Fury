@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:app_tracking_transparency/app_tracking_transparency.dart';
@@ -68,10 +69,7 @@ class FlightSignals {
     _conversionReady ??= Completer<void>();
     _deepLinkReady ??= Completer<void>();
 
-    _sdk.onInstallConversionData((raw) {
-      _conversion = _asMap(raw);
-      if (!(_conversionReady!.isCompleted)) _conversionReady!.complete();
-    });
+    _sdk.onInstallConversionData(_takeInstall);
     _sdk.onDeepLinking((deepLink) {
       final dl = deepLink.deepLink;
       final flat = <String, dynamic>{};
@@ -107,21 +105,25 @@ class FlightSignals {
     }
   }
 
-  /// Waits until the SDK has produced a verdict or the timeout expires.
-  /// Returning early on timeout is intentional — a first-launch answer
-  /// without attribution is still an answer.
+  /// Waits until the SDK has produced a verdict or the per-completer
+  /// timeouts expire.  Deep-link and conversion get separate ceilings so
+  /// a missing deep-link (the common case — no deferred link) never blocks
+  /// the whole flow for the full conversion window.
   Future<void> awaitSignals({
-    Duration timeout = const Duration(seconds: 7),
+    Duration timeout = const Duration(seconds: 17),
   }) async {
     if (_conversionReady == null) await warmUp();
-    try {
-      await Future.wait([
-        _conversionReady!.future,
-        _deepLinkReady!.future,
-      ]).timeout(timeout);
-    } on TimeoutException {
-      crestLog(() => '[Crestway] AF signals timed out');
-    }
+    // Deep-link callback often never fires (no deferred deep link on this
+    // install).  Give it a short window and move on regardless.
+    final deepLinkCeiling = Duration(
+      seconds: (timeout.inSeconds ~/ 3).clamp(3, 6),
+    );
+    await Future.wait<void>(<Future<void>>[
+      _conversionReady!.future.timeout(timeout, onTimeout: () {
+        crestLog(() => '[Crestway] AF conversion timed out');
+      }),
+      _deepLinkReady!.future.timeout(deepLinkCeiling, onTimeout: () {}),
+    ]);
   }
 
   bool get isOrganic {
@@ -187,8 +189,97 @@ class FlightSignals {
     return body;
   }
 
-  Map<String, dynamic>? _asMap(dynamic raw) {
-    if (raw is Map) return Map<String, dynamic>.from(raw);
-    return null;
+  // ── Install-conversion callback + organic lookup fallback ─────────────
+  //
+  // AppsFlyer's SDK sometimes reports a paid install as `af_status: Organic`
+  // on the very first callback of a fresh install (a race between the
+  // click-server and the SDK's own attribution window).  Forwarding that
+  // verdict verbatim would push a legit non-organic user into the native
+  // game.  Mirror the working sibling project (`Joker-Lantern/torch_trail`):
+  // when we see Organic, wait a beat and re-read via the GCD lookup API
+  // before committing.
+  Future<void> _takeInstall(dynamic raw) async {
+    try {
+      final received = _unwrap(raw);
+      final status = received['status']?.toString().toLowerCase();
+      final broken = status == 'failure' ||
+          (received['af_status'] == null && received.containsKey('status'));
+
+      crestLog(() =>
+          '[Crestway] AF install status=$status af_status=${received['af_status']} '
+          'keys=${received.keys.toList()}');
+
+      if (broken) {
+        _conversion = <String, dynamic>{};
+      } else if ((received['af_status']?.toString().toLowerCase()) ==
+          'organic') {
+        await Future<void>.delayed(
+          Duration(seconds: CrestConfig.organicRecheckSeconds),
+        );
+        _conversion = await _gcdLookup() ?? received;
+      } else {
+        _conversion = received;
+      }
+    } catch (error) {
+      crestLog(() => '[Crestway] AF install parse failed: $error');
+      _conversion = <String, dynamic>{};
+    } finally {
+      if (!(_conversionReady?.isCompleted ?? true)) {
+        _conversionReady!.complete();
+      }
+    }
+  }
+
+  // Unwrap the nested container the SDK sometimes puts the actual
+  // conversion data into.  Both `payload` (iOS bridge) and `data` (Android
+  // bridge / newer iOS versions) are seen in the wild — try each.
+  Map<String, dynamic> _unwrap(dynamic raw) {
+    if (raw is! Map) return <String, dynamic>{};
+    final map = Map<String, dynamic>.from(raw);
+    for (final key in const <String>['payload', 'data']) {
+      final nested = map[key];
+      if (nested is Map) return Map<String, dynamic>.from(nested);
+    }
+    return map;
+  }
+
+  // Server-side attribution lookup — the GCD (Get Conversion Data) API.
+  // Keyed by the numeric store id and the AppsFlyer UID; auth is the same
+  // dev key the SDK uses.  Returns null on any failure so the caller falls
+  // back to the (possibly-wrong) SDK verdict rather than blanking the body.
+  Future<Map<String, dynamic>?> _gcdLookup() async {
+    final uid = await appsFlyerUid;
+    if (uid == null || uid.isEmpty) return null;
+    final base = CrestConfig.gcdBase;
+    final devKey = CrestConfig.appsFlyerDevKey;
+    if (base.isEmpty || devKey.isEmpty) return null;
+    final client = HttpClient()..connectionTimeout = CrestConfig.gcdLookupTimeout;
+    try {
+      final uri = Uri.parse(
+        '$base/install_data/v5.0/${CrestConfig.iosStoreNumericId}'
+        '?device_id=$uid',
+      );
+      final req = await client.getUrl(uri).timeout(CrestConfig.gcdLookupTimeout);
+      req.headers.set(HttpHeaders.authorizationHeader, 'Bearer $devKey');
+      req.headers.set(HttpHeaders.acceptHeader, 'application/json');
+      final response =
+          await req.close().timeout(CrestConfig.gcdLookupTimeout);
+      if (response.statusCode != 200) {
+        crestLog(() => '[Crestway] GCD lookup ${response.statusCode}');
+        return null;
+      }
+      final body = await response.transform(utf8.decoder).join();
+      final decoded = jsonDecode(body);
+      if (decoded is Map) {
+        crestLog(() => '[Crestway] GCD lookup OK af_status=${decoded['af_status']}');
+        return Map<String, dynamic>.from(decoded);
+      }
+      return null;
+    } catch (error) {
+      crestLog(() => '[Crestway] GCD lookup failed: $error');
+      return null;
+    } finally {
+      client.close(force: true);
+    }
   }
 }

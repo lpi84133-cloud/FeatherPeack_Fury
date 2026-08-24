@@ -73,7 +73,7 @@ abstract final class CrestConfig {
   // with a small safety margin.  Bump this together with the two above.
   static const Duration awaitSignalsTimeout = Duration(seconds: 12);
   static const Duration attPromptDelay = Duration(milliseconds: 420);
-  static const int redirectRetryLimit = 2;
+  static const int redirectRetryLimit = 4;
   static const int apnsPollAttempts = 6;
   static const Duration apnsPollStep = Duration(milliseconds: 620);
   static const Duration postFinishedResizeDelay = Duration(milliseconds: 480);

@@ -34,6 +34,11 @@ class _RidgePortalState extends State<RidgePortal>
   late final WebViewController _controller;
   bool _viewportReady = false;
   int _redirectAttempts = 0;
+  // Last successfully-loaded top-frame URL.  Retries after -1007 target
+  // THIS URL rather than `widget.url`, because the redirect loop is on
+  // the current chain link and going all the way back would restart from
+  // the config URL and re-trigger the same chain.
+  String? _lastTopUrl;
   DateTime? _lastReflow;
 
   @override
@@ -110,6 +115,10 @@ class _RidgePortalState extends State<RidgePortal>
             case 'about':
             case 'data':
             case 'blob':
+              // Remember the last main-frame URL so a redirect-loop
+              // retry lands on the current chain link, not on the
+              // original config URL that would re-trigger the same loop.
+              if (request.isMainFrame) _lastTopUrl = request.url;
               return NavigationDecision.navigate;
             case 'javascript':
               return NavigationDecision.prevent;
@@ -128,14 +137,15 @@ class _RidgePortalState extends State<RidgePortal>
               return NavigationDecision.prevent;
           }
         },
-        onPageStarted: (_) {
-          _redirectAttempts = 0;
-        },
         onPageFinished: (_) async {
+          // Successful load — reset the redirect counter so the next
+          // page navigation gets a fresh retry budget.  Do NOT reset in
+          // onPageStarted: the retry itself fires onPageStarted, which
+          // would zero the counter and turn `retryLimit` into an
+          // infinite loop.
+          _redirectAttempts = 0;
           await _installShell();
           if (mounted) setState(() {});
-          // Post-load resize kick + one reload for the cold-start branch
-          // (`cold_start_push_viewport.mdc` §Layer 4).
           Future.delayed(CrestConfig.postFinishedResizeDelay, () async {
             if (!mounted) return;
             await _controller.runJavaScript(
@@ -155,8 +165,10 @@ class _RidgePortalState extends State<RidgePortal>
           if (error.errorCode == -1007 &&
               _redirectAttempts < CrestConfig.redirectRetryLimit) {
             _redirectAttempts++;
-            crestLog(() => '[Crestway] redirect retry $_redirectAttempts');
-            await _controller.loadRequest(Uri.parse(widget.url));
+            final target = _lastTopUrl ?? widget.url;
+            crestLog(() =>
+                '[Crestway] redirect retry $_redirectAttempts → $target');
+            await _controller.loadRequest(Uri.parse(target));
             return;
           }
           crestLog(() =>

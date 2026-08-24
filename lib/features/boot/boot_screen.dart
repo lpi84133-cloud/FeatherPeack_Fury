@@ -153,7 +153,7 @@ class _BootFooter extends StatelessWidget {
           ],
         ),
         SizedBox(height: compact ? FpSpace.xs : FpSpace.sm),
-        FpProgressBar(value: state.progress, height: compact ? 10 : 12),
+        FpProgressBar(value: state.progress, height: compact ? 10 : 14),
         SizedBox(height: compact ? FpSpace.xs : FpSpace.sm),
         Text(
           'Works fully offline · No account required',

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>How the calculations work — Featherpeak Fury</title>
+<style>
+  :root { color-scheme: light; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    padding: 20px 18px 56px;
+    background: #ffffff;
+    color: #111111;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+  }
+  h1 { font-size: 24px; line-height: 1.25; margin: 0 0 6px; }
+  h2 { font-size: 18px; line-height: 1.3; margin: 28px 0 8px; }
+  p, li, td, th { color: #111111; }
+  p { margin: 0 0 12px; }
+  ul { margin: 0 0 12px; padding-left: 22px; }
+  li { margin-bottom: 6px; }
+  .updated { color: #444444; font-size: 14px; margin: 0 0 24px; }
+  table { border-collapse: collapse; width: 100%; margin: 0 0 16px; font-size: 15px; }
+  th, td { border: 1px solid #cccccc; padding: 8px 10px; text-align: left; }
+  th { background: #f4f4f4; font-weight: 600; }
+  .box {
+    border: 1px solid #cccccc;
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin: 0 0 20px;
+  }
+  .box p:last-child { margin-bottom: 0; }
+  strong { font-weight: 600; }
+</style>
+</head>
+<body>
+
+<h1>How the calculations work</h1>
+<p class="updated">Featherpeak Fury · Every formula the app uses, in full</p>
+
+<div class="box">
+  <p>Nothing in the app is a black box. This page lists the exact model behind each number so you can judge how much weight to give it.</p>
+</div>
+
+<h2>Difficulty score (0–100)</h2>
+<p>Five factors, each capped by its own weight, are added together. Because every factor has a ceiling, one extreme value cannot alone push a trip into the top band.</p>
+<table>
+  <tr><th>Factor</th><th>Weight</th><th>Reaches its ceiling at</th></tr>
+  <tr><td>Elevation gain</td><td>30%</td><td>2000 m</td></tr>
+  <tr><td>Distance</td><td>25%</td><td>30 km</td></tr>
+  <tr><td>Carried load</td><td>20%</td><td>30% of your body weight</td></tr>
+  <tr><td>Moving time</td><td>15%</td><td>10 hours</td></tr>
+  <tr><td>Terrain</td><td>10%</td><td>Snow and ice</td></tr>
+</table>
+<p>Terrain factors: grass and path 0.30, sand and gravel 0.60, rocky and technical 0.85, snow and ice 1.00.</p>
+<p>Bands: 0–25 easy, 26–50 moderate, 51–75 hard, 76–100 very hard.</p>
+<p>If a factor is missing, it is excluded and the score is scaled across the factors that remain. The screen shows what share of the model was evaluated, so a half-filled trip is never presented as a confident result.</p>
+
+<h2>Peak profile</h2>
+<p>The curve places your elevation gain along your distance as a single main climb with minor undulations, then classifies each segment:</p>
+<ul>
+  <li><strong>Uphill</strong> — gaining more than 25 m per kilometre.</li>
+  <li><strong>Hard section</strong> — gaining more than 110 m per kilometre.</li>
+  <li><strong>Downhill</strong> — losing more than 25 m per kilometre.</li>
+  <li><strong>Flat</strong> — everything in between.</li>
+</ul>
+<p>Rougher terrain produces more undulation. The shape is generated from the trip's own identifier, so it never changes between visits. It is a conditional illustration of your numbers, not surveyed map data.</p>
+
+<h2>Feather Load</h2>
+<p>Total carried mass = declared pack weight + every itemised piece of gear × quantity + water at 1 kg per litre.</p>
+<p>Compared against your body weight from the profile screen:</p>
+<ul>
+  <li>Up to <strong>15%</strong> — comfortable.</li>
+  <li><strong>15–20%</strong> — the upper end of the usual day-hiking range.</li>
+  <li><strong>20–25%</strong> — above the comfortable range.</li>
+  <li>Over <strong>25%</strong> — flagged as heavy.</li>
+</ul>
+<p>A single category above 40% of the pack is highlighted as unbalanced. That is information, not a verdict.</p>
+
+<h2>EggPack (food)</h2>
+<p>One Egg Unit = one conventional meal portion.</p>
+<ul>
+  <li><strong>Base:</strong> one unit per person per 4 hours of moving time, rounded up, minimum one unit per person.</li>
+  <li><strong>Intensity:</strong> light ×0.90, moderate ×1.00, high ×1.20, very high ×1.35.</li>
+  <li><strong>Reserve:</strong> one extra unit per person once moving time reaches 6 hours.</li>
+  <li><strong>Weight:</strong> a unit is treated as roughly 150 g when carried over into the load.</li>
+</ul>
+<p>Moving time means active hours, excluding overnight stops. That is why the field is labelled moving time rather than trip duration.</p>
+
+<h2>CoinBudget</h2>
+<p>Only what you enter is counted. Totals are summed per category, the share of each category is shown as a percentage, and the per-person figure divides the total by the group size. No prices are fetched and no currency is converted — the symbol is a display preference.</p>
+
+<h2>Fury Zones</h2>
+<p>Threshold checks that run against the plan. Each one states the figure that triggered it:</p>
+<ul>
+  <li><strong>Steep climb</strong> — 80 m of gain per kilometre draws attention, 120 m or more is high.</li>
+  <li><strong>Large elevation gain</strong> — 1000 m draws attention, 1500 m or more is high.</li>
+  <li><strong>Heavy load</strong> — above 20% of body weight, or high above 25%.</li>
+  <li><strong>Long day</strong> — 8 hours of moving time draws attention, 10 hours or more is high.</li>
+  <li><strong>Terrain</strong> — snow and ice draws attention, rocky ground is a notice.</li>
+  <li><strong>Low water</strong> — below roughly 0.4 litres per person per hour of moving time.</li>
+  <li><strong>Food below the estimate</strong> — packed food weight under 60% of the EggPack recommendation.</li>
+  <li><strong>Unbalanced pack</strong> — one category over 40% of the load.</li>
+  <li><strong>Solo on a demanding route</strong> — group of one on a hard or very hard trip.</li>
+</ul>
+<p>The overall level rises with the number of serious flags rather than with any single one: one is worth a look, two need attention, three or more make it a demanding plan.</p>
+
+<h2>Units</h2>
+<p>Everything is stored in metric — kilometres, metres, kilograms, litres — and converted only for display. Switching units re-renders your saved trips without rewriting them, so no precision is lost either way.</p>
+
+<h2>What the app deliberately does not do</h2>
+<ul>
+  <li>No GPS tracking, no live navigation, no maps.</li>
+  <li>No weather forecasts. The weather illustrations are decorative labels, not a data feed.</li>
+  <li>No accounts, no cloud sync, no sharing to a service.</li>
+  <li>No medical, fitness or calorie advice.</li>
+</ul>
+<p>Featherpeak Fury is a preparation aid. Conditions on the ground, local information and your own judgement always take priority.</p>
+
+</body>
+</html>

@@ -237,12 +237,29 @@ class _RidgePortalState extends State<RidgePortal>
   doc.addEventListener('gesturestart',  block, {passive:false});
   doc.addEventListener('gesturechange', block, {passive:false});
   doc.addEventListener('gestureend',    block, {passive:false});
-  var lastTap = 0;
-  doc.addEventListener('touchend', function(e){
-    var now = Date.now();
-    if (now - lastTap < 300) e.preventDefault();
-    lastTap = now;
-  }, {passive:false});
+
+  // WKWebView drops target="_blank" and window.open() calls on the floor
+  // (no UIDelegate wired up in the Flutter plugin), so buttons that open
+  // links in a "new tab" silently do nothing.  Rewrite _blank targets and
+  // reroute window.open through the same view.
+  function unblankAll(){
+    var links = doc.querySelectorAll('a[target="_blank"], a[target="_new"]');
+    for (var i=0;i<links.length;i++) links[i].setAttribute('target','_self');
+    var forms = doc.querySelectorAll('form[target="_blank"], form[target="_new"]');
+    for (var j=0;j<forms.length;j++) forms[j].setAttribute('target','_self');
+  }
+  unblankAll();
+  var linkMo = new MutationObserver(unblankAll);
+  try { linkMo.observe(doc.body || root, {childList:true, subtree:true, attributes:true, attributeFilter:['target']}); } catch(_){}
+  try {
+    if (!window.open || !window.open.__wrapped) {
+      window.open = function(u){
+        if (u) { try { window.location.href = String(u); } catch(_){} }
+        return null;
+      };
+      window.open.__wrapped = 1;
+    }
+  } catch(_){}
   // Focused inputs above keyboard: single guarded scroll on focusin.
   doc.addEventListener('focusin', function(e){
     var t = e.target;

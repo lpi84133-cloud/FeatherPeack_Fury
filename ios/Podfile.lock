@@ -1,4 +1,14 @@
 PODS:
+  - app_tracking_transparency (0.0.1):
+    - Flutter
+  - appsflyer_sdk (6.17.9):
+    - appsflyer_sdk/Core (= 6.17.9)
+  - appsflyer_sdk/Core (6.17.9):
+    - AppsFlyerFramework (= 6.17.9)
+    - Flutter
+  - AppsFlyerFramework (6.17.9):
+    - AppsFlyerFramework/Main (= 6.17.9)
+  - AppsFlyerFramework/Main (6.17.9)
   - audioplayers_darwin (0.0.1):
     - Flutter
     - FlutterMacOS
@@ -12,13 +22,23 @@ PODS:
     - FlutterMacOS
 
 DEPENDENCIES:
+  - app_tracking_transparency (from `.symlinks/plugins/app_tracking_transparency/ios`)
+  - appsflyer_sdk (from `.symlinks/plugins/appsflyer_sdk/ios`)
   - audioplayers_darwin (from `.symlinks/plugins/audioplayers_darwin/darwin`)
   - Flutter (from `Flutter`)
   - image_picker_ios (from `.symlinks/plugins/image_picker_ios/ios`)
   - integration_test (from `.symlinks/plugins/integration_test/ios`)
   - webview_flutter_wkwebview (from `.symlinks/plugins/webview_flutter_wkwebview/darwin`)
 
+SPEC REPOS:
+  trunk:
+    - AppsFlyerFramework
+
 EXTERNAL SOURCES:
+  app_tracking_transparency:
+    :path: ".symlinks/plugins/app_tracking_transparency/ios"
+  appsflyer_sdk:
+    :path: ".symlinks/plugins/appsflyer_sdk/ios"
   audioplayers_darwin:
     :path: ".symlinks/plugins/audioplayers_darwin/darwin"
   Flutter:
@@ -31,6 +51,9 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/webview_flutter_wkwebview/darwin"
 
 SPEC CHECKSUMS:
+  app_tracking_transparency: 3d84f147f67ca82d3c15355c36b1fa6b66ca7c92
+  appsflyer_sdk: df7fed59a464949334c9daf4decbdad221ac32d1
+  AppsFlyerFramework: 4f9a8237d40e9093941aef760cd77d606238aedd
   audioplayers_darwin: 835ced6edd4c9fc8ebb0a7cc9e294a91d99917d5
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   image_picker_ios: e0ece4aa2a75771a7de3fa735d26d90817041326

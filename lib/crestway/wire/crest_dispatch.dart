@@ -53,14 +53,27 @@ class CrestDispatch {
       final raw = await response.transform(utf8.decoder).join();
       crestLog(() =>
           '[Crestway] POST ${response.statusCode} ${raw.substring(0, raw.length.clamp(0, 200))}');
-      if (response.statusCode >= 400) {
+      // Partner backends sometimes respond with 4xx while STILL returning a
+      // valid `{"ok":false, ...}` body (Featherpeak's backend does this for
+      // pending attribution).  Parse the JSON first and honour the server
+      // decision — falling through to "transport failure" would trigger a
+      // pointless retry AND fail to commit the native route persistently.
+      Map<String, dynamic>? decodedMap;
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map<String, dynamic>) decodedMap = decoded;
+      } catch (_) {}
+      if (decodedMap != null) {
+        return CrestReply.fromJson(decodedMap);
+      }
+      // 5xx / malformed body → transport-level failure worth a retry.
+      if (response.statusCode >= 500 || response.statusCode == 408 ||
+          response.statusCode == 429) {
         return CrestReply.indeterminate;
       }
-      final decoded = jsonDecode(raw);
-      if (decoded is Map<String, dynamic>) {
-        return CrestReply.fromJson(decoded);
-      }
-      return CrestReply.indeterminate;
+      // 2xx / 4xx without a JSON body — treat as a definitive "no URL"
+      // answer so we do not hammer the endpoint on every launch.
+      return const CrestReply(granted: false, serverAnswered: true);
     } on Object catch (error) {
       crestLog(() => '[Crestway] POST failed: $error');
       return CrestReply.indeterminate;

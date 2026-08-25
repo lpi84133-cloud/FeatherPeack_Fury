@@ -11,12 +11,6 @@ workflows:
       flutter: default
       xcode: latest
       cocoapods: default
-      vars:
-        # Add GOOGLE_SERVICES_IOS in Codemagic → App Settings →
-        # Environment variables as a secret variable containing the
-        # base64-encoded content of GoogleService-Info.plist:
-        #   base64 -i ios/Runner/GoogleService-Info.plist | pbcopy
-        GOOGLE_SERVICES_IOS: $GOOGLE_SERVICES_IOS
 
     scripts:
       # Firebase поставляется через CocoaPods; Flutter SPM и CocoaPods
@@ -25,14 +19,6 @@ workflows:
       - name: Disable Swift Package Manager
         script: |
           flutter config --no-enable-swift-package-manager
-
-      # Восстанавливаем GoogleService-Info.plist из зашифрованной
-      # переменной окружения.  Файл в .gitignore — в репозиторий
-      # не попадает, но Codemagic подставляет его через env var.
-      - name: Restore GoogleService-Info.plist
-        script: |
-          echo "$GOOGLE_SERVICES_IOS" | base64 --decode \
-            > ios/Runner/GoogleService-Info.plist
 
       - name: Get Flutter packages
         script: flutter pub get

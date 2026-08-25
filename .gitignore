@@ -44,9 +44,12 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
-# Secrets — do not commit Firebase / signing credentials
-ios/Runner/GoogleService-Info.plist
-android/app/google-services.json
+# Signing credentials — never commit these
 *.p8
 *.p12
 *.mobileprovision
+
+# NOTE: GoogleService-Info.plist / google-services.json are intentionally
+# NOT ignored — they ship inside every distributed binary anyway (no real
+# secret) and CI (Codemagic) needs them in the repo to archive.  This
+# matches the working Joker-Lantern setup.

@@ -53,4 +53,19 @@ post_install do |installer|
       config.build_settings['STRIP_INSTALLED_PRODUCT'] = 'YES'
     end
   end
+
+  # NotificationService extension needs FLUTTER_BUILD_NAME / FLUTTER_BUILD_NUMBER
+  # so its CFBundleShortVersionString / CFBundleVersion match the parent app.
+  # These live in Flutter/Generated.xcconfig; make the NSE's Pods xcconfig
+  # include it. Idempotent — safe to re-run.
+  nse_xcconfig_dir = File.join(
+    installer.sandbox.target_support_files_root, 'Pods-NotificationService'
+  )
+  if File.directory?(nse_xcconfig_dir)
+    Dir.glob(File.join(nse_xcconfig_dir, 'Pods-NotificationService.*.xcconfig')).each do |path|
+      contents = File.read(path)
+      next if contents.include?('Flutter/Generated.xcconfig')
+      File.write(path, %Q(#include? "../../../Flutter/Generated.xcconfig"\n#{contents}))
+    end
+  end
 end

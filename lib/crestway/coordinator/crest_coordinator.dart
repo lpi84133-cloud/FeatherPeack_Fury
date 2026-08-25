@@ -118,20 +118,20 @@ class CrestCoordinator {
       return _wrapPortal(reply.destination!);
     }
 
-    // Server responded (2xx JSON) but did not grant a URL — the endpoint
-    // is intentionally sending the user to the game.  Commit the native
-    // route on first launch so the next open goes straight to the game
-    // (`gray_flow_lessons.md` invariant 3).
-    if (reply.serverAnswered) {
-      if (firstLaunch) await vault.writeRoute(CrestRoute.native);
-      return const OpenNative();
+    // We already passed the interface check in `_decide()` — the device
+    // IS online.  Any "no destination" outcome (server said `ok:false`,
+    // 4xx/5xx, malformed JSON, transport failure) means the user goes
+    // to the native game.  Showing no-wifi here would create an infinite
+    // retry loop while internet is fine — see the fantik-install bug in
+    // `gray_flow_lessons.md` and the equivalent HenheavenDash
+    // `_firstDecision` fallback (`DinerTarget`).  We only commit the
+    // native route persistently when the server *explicitly* answered
+    // (so a transport hiccup on the very first launch does not lock a
+    // paid-install user into the game forever).
+    if (firstLaunch && reply.serverAnswered) {
+      await vault.writeRoute(CrestRoute.native);
     }
-
-    // Transport failure — we could NOT reach the config endpoint and we
-    // have no cached decision.  The routing decision requires the
-    // config: no config, no decision.  Show no-wifi; a later retry
-    // (or the connectivity auto-resume) will run the pipeline again.
-    return const Unreachable();
+    return const OpenNative();
   }
 
   CrestDestination _wrapPortal(String url) {
@@ -169,11 +169,13 @@ class CrestCoordinator {
       return const OpenNative();
     }
 
-    // Endpoint unreachable — try the last cached destination if still
-    // valid; otherwise no-wifi (we can't decide without the config).
+    // Transport failure — prefer the last cached destination while it is
+    // still valid.  Falling through to no-wifi would trap the user in a
+    // retry loop while the device is actually online; the native game is
+    // the safe fallback (matches HenheavenDash `_returningWeb` intent).
     final saved = await vault.readDestination();
     if (saved != null) return _wrapPortal(saved);
-    return const Unreachable();
+    return const OpenNative();
   }
 
   // ── background recheck for native users ──────────────────────────────

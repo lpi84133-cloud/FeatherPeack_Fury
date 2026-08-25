@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -153,7 +155,21 @@ class _AscentSplashState extends State<AscentSplash>
       userAgent = ready.userAgent;
     }
 
-    final destination = await coordinator.decide();
+    // Last-resort ceiling: the pipeline is already time-boxed at every
+    // step (ATT 420 ms, AF signals 12 s, dispatch 2 × 11 s), but if one
+    // of the futures wedges (SDK never fires its callback, TLS stack
+    // hangs on a bad partner network) the user must not be stuck on
+    // 35 %.  22 s covers the worst legit case with margin; past that we
+    // fall back to the native game — same shape as HenheavenDash
+    // `WarmupGate._lastResort`.
+    CrestDestination destination;
+    try {
+      destination = await coordinator.decide().timeout(
+        const Duration(seconds: 22),
+      );
+    } on TimeoutException {
+      destination = const OpenNative();
+    }
     if (!mounted || _decided) return;
     // Remember the resolved values so `_dispatch` can use them.
     _resolvedCoordinator = coordinator;

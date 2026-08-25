@@ -15,6 +15,23 @@ class CrestDispatch {
   final String userAgent;
 
   Future<CrestReply> post(Map<String, dynamic> body) async {
+    // Two attempts with a short backoff between them.  The first attempt
+    // is often the one that lands right after "no-wifi → wifi restored"
+    // when the TLS stack is still warming up — the second attempt
+    // succeeds much more reliably.  We only retry on TRANSPORT failure
+    // (indeterminate reply) — a server 2xx / 4xx answer is respected
+    // immediately.
+    for (var attempt = 0; attempt < 2; attempt++) {
+      final reply = await _postOnce(body);
+      if (reply.serverAnswered) return reply;
+      if (attempt == 0) {
+        await Future<void>.delayed(const Duration(milliseconds: 1000));
+      }
+    }
+    return CrestReply.indeterminate;
+  }
+
+  Future<CrestReply> _postOnce(Map<String, dynamic> body) async {
     final client = HttpClient()
       ..connectionTimeout = CrestConfig.configPostTimeout
       ..userAgent = userAgent;

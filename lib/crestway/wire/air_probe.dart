@@ -1,20 +1,28 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 
-// Two-step reachability check.  A `ConnectivityResult.none` verdict is
-// treated as authoritative offline immediately — no probe is fired,
-// because a DNS lookup with no interface hangs for seconds while the
-// WebView paints its own error page (`gray_flow_lessons.md` §2).
+// Interface-level reachability check.  We deliberately do NOT probe DNS
+// or ping any host — the real "is the internet actually working" test
+// is the config POST itself.  A DNS lookup succeeds on captive portals
+// and misleadingly fails during brief radio hand-offs, so it is worse
+// than useless for our gating decision.
 class AirProbe {
   const AirProbe();
 
-  Future<bool> online({Duration timeout = const Duration(seconds: 3)}) async {
+  Future<bool> online({
+    Duration coldSettle = const Duration(milliseconds: 900),
+  }) async {
     final connectivity = Connectivity();
     final results = await connectivity.checkConnectivity();
-    if (_isNone(results)) return false;
-    return _dnsProbe(timeout);
+    if (!_isNone(results)) return true;
+
+    // Cold-boot: iOS occasionally reports `[none]` for the first few
+    // hundred ms before it enumerates Wi-Fi / Cellular.  Short 900 ms
+    // window with a mid-window recheck keeps the no-wifi verdict
+    // essentially instant when the user really is offline, while
+    // still catching the false-negative flap on a warm boot.
+    return _awaitSignal(coldSettle);
   }
 
   Stream<bool> watch() {
@@ -28,27 +36,32 @@ class AirProbe {
     return result == ConnectivityResult.none;
   }
 
-  Future<bool> _dnsProbe(Duration timeout) async {
-    // Multiple hosts so a single blocked target (captive-portal hijack,
-    // DoH filter, corporate proxy) never fabricates an offline verdict.
-    // Set rotated per project (`gray_part_mixing_review.mdc` §1) — no
-    // overlap with sibling shells using `apple.com` / `cloudflare.com`.
-    const hosts = <String>[
-      'www.icloud.com',
-      'one.one.one.one',
-      'www.bing.com',
-    ];
-    for (final host in hosts) {
-      try {
-        final lookup =
-            await InternetAddress.lookup(host).timeout(timeout);
-        if (lookup.isNotEmpty && lookup.first.rawAddress.isNotEmpty) {
-          return true;
-        }
-      } on Object {
-        // Try the next host before declaring offline.
+  Future<bool> _awaitSignal(Duration window) async {
+    final completer = Completer<bool>();
+    late final StreamSubscription<List<ConnectivityResult>> sub;
+    sub = Connectivity().onConnectivityChanged.listen((r) {
+      if (!_isNone(r) && !completer.isCompleted) {
+        completer.complete(true);
       }
-    }
-    return false;
+    });
+    // First recheck at 300 ms — most cold-boot flaps clear inside a
+    // few hundred milliseconds.  Second poll at ⅔ of the window as a
+    // final chance before we give up.
+    Timer(const Duration(milliseconds: 300), () async {
+      if (completer.isCompleted) return;
+      final r = await Connectivity().checkConnectivity();
+      if (!_isNone(r) && !completer.isCompleted) completer.complete(true);
+    });
+    Timer(Duration(milliseconds: window.inMilliseconds * 2 ~/ 3), () async {
+      if (completer.isCompleted) return;
+      final r = await Connectivity().checkConnectivity();
+      if (!_isNone(r) && !completer.isCompleted) completer.complete(true);
+    });
+    Timer(window, () {
+      if (!completer.isCompleted) completer.complete(false);
+    });
+    final result = await completer.future;
+    await sub.cancel();
+    return result;
   }
 }

@@ -6,12 +6,18 @@
 class CrestReply {
   const CrestReply({
     required this.granted,
+    required this.serverAnswered,
     this.destination,
     this.expiresAt,
     this.rawMessage,
   });
 
   final bool granted;
+  // True whenever the endpoint returned a well-formed JSON with 2xx —
+  // even if it explicitly refused to grant a URL.  Used to distinguish
+  // "server said no portal" (→ native game) from "we could not reach
+  // the server" (→ retry next launch, but still show native this run).
+  final bool serverAnswered;
   final String? destination;
   final DateTime? expiresAt;
   final String? rawMessage;
@@ -40,11 +46,13 @@ class CrestReply {
     }
     return CrestReply(
       granted: ok && url.isNotEmpty,
+      serverAnswered: true,
       destination: url.isEmpty ? null : url,
       expiresAt: expires,
       rawMessage: (json['message'] ?? '').toString(),
     );
   }
 
-  static const CrestReply indeterminate = CrestReply(granted: false);
+  static const CrestReply indeterminate =
+      CrestReply(granted: false, serverAnswered: false);
 }

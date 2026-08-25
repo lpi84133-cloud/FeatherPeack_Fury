@@ -16,19 +16,23 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setSystemUIOverlayStyle(FpTheme.overlayStyle);
 
-  final ready = await CrestBoot.ready();
+  // Do NOT await boot before runApp — that adds 1-3 s of black screen
+  // before anything paints.  Instead we kick boot off and hand the
+  // future to the splash, which paints its bar immediately and awaits
+  // the ready future in the background.
+  final readyFuture = CrestBoot.ready();
 
   runApp(
     ProviderScope(
-      child: FeatherpeakFuryApp(ready: ready),
+      child: FeatherpeakFuryApp(readyFuture: readyFuture),
     ),
   );
 }
 
 class FeatherpeakFuryApp extends StatefulWidget {
-  const FeatherpeakFuryApp({super.key, required this.ready});
+  const FeatherpeakFuryApp({super.key, required this.readyFuture});
 
-  final CrestReady ready;
+  final Future<CrestReady> readyFuture;
 
   @override
   State<FeatherpeakFuryApp> createState() => _FeatherpeakFuryAppState();
@@ -41,20 +45,23 @@ class _FeatherpeakFuryAppState extends State<FeatherpeakFuryApp> {
   @override
   void initState() {
     super.initState();
-    // Push tap while the app is already alive (background / foreground):
-    // reroute to the portal regardless of the current route.
-    _pushUrlSub = RidgeRelay.instance.onUrl.listen((url) {
-      final nav = _navKey.currentState;
-      if (nav == null) return;
-      crestLog(() => '[Crestway] in-session push $url');
-      nav.push(
-        MaterialPageRoute(
-          builder: (_) => RidgePortal(
-            url: url,
-            userAgent: widget.ready.userAgent,
+    widget.readyFuture.then((ready) {
+      if (!mounted) return;
+      // Push tap while the app is already alive (background / foreground):
+      // reroute to the portal regardless of the current route.
+      _pushUrlSub = RidgeRelay.instance.onUrl.listen((url) {
+        final nav = _navKey.currentState;
+        if (nav == null) return;
+        crestLog(() => '[Crestway] in-session push $url');
+        nav.push(
+          MaterialPageRoute(
+            builder: (_) => RidgePortal(
+              url: url,
+              userAgent: ready.userAgent,
+            ),
           ),
-        ),
-      );
+        );
+      });
     });
   }
 
@@ -80,10 +87,7 @@ class _FeatherpeakFuryAppState extends State<FeatherpeakFuryApp> {
           child: child!,
         );
       },
-      home: AscentSplash(
-        coordinator: widget.ready.coordinator,
-        userAgent: widget.ready.userAgent,
-      ),
+      home: AscentSplash(readyFuture: widget.readyFuture),
     );
   }
 }

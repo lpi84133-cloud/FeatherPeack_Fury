@@ -42,9 +42,29 @@ class CrestCoordinator {
       return const OpenNative();
     }
 
-    // A cold-start push URL always wins.  It is one-shot: `consume()` and
-    // `consumeInitialUrl()` clear their source so a later re-launch takes
-    // the ordinary config path.
+    final route = vault.readRoute();
+
+    // Native re-launches must NEVER touch the network — the game is
+    // fully offline-capable.  A pending organic-→-portal recheck runs
+    // fire-and-forget so the next launch picks up any new route.
+    if (route == CrestRoute.native) {
+      if (vault.organicRecheckDue) {
+        unawaited(_backgroundRecheck());
+      }
+      return const OpenNative();
+    }
+
+    // Portal + undecided both require an internet-backed decision.
+    // Do the interface check first — before any beacon / pipeline —
+    // so a truly offline device gets the no-wifi screen instantly.
+    final online = await probe.online();
+    if (!online) {
+      crestLog(() => '[Crestway] no interface → unreachable');
+      return const Unreachable();
+    }
+
+    // A cold-start push URL wins ONLY when we actually have connectivity;
+    // opening a WebView while offline just shows an ugly WK error page.
     final beacon = await LaunchBeacon.consume();
     if (beacon != null) {
       crestLog(() => '[Crestway] cold-start beacon $beacon');
@@ -56,28 +76,20 @@ class CrestCoordinator {
       return OpenPortal(fromFcm, fromColdStartPush: true);
     }
 
-    final route = vault.readRoute();
     switch (route) {
       case CrestRoute.portal:
         return _returningPortal();
-      case CrestRoute.native:
-        return _returningNative();
       case CrestRoute.undecided:
         return _firstDecision();
+      case CrestRoute.native:
+        // Unreachable: handled above.
+        return const OpenNative();
     }
   }
 
   // ── first launch ─────────────────────────────────────────────────────
   Future<CrestDestination> _firstDecision() async {
-    final online = await probe.online();
-    if (!online) {
-      crestLog(() => '[Crestway] first launch offline');
-      return const Unreachable();
-    }
-
-    // ATT prompt must run before we start awaiting signals; if the SDK
-    // starts first the prompt gets dropped on backgrounded starts
-    // (`gray_flow_lessons.md` §26).
+    // Online check already happened in `_decide` — do not repeat it.
     await signals.ensureTrackingPrompt();
     await signals.warmUp();
     await signals.awaitSignals(timeout: CrestConfig.awaitSignalsTimeout);
@@ -106,16 +118,20 @@ class CrestCoordinator {
       return _wrapPortal(reply.destination!);
     }
 
-    // No URL — but we DID reach the endpoint (message present).  Only
-    // commit `native` on a real answer; a transport failure keeps the
-    // route as undecided so the next launch tries again
+    // Server responded (2xx JSON) but did not grant a URL — the endpoint
+    // is intentionally sending the user to the game.  Commit the native
+    // route on first launch so the next open goes straight to the game
     // (`gray_flow_lessons.md` invariant 3).
-    if (reply.rawMessage != null && reply.rawMessage!.isNotEmpty) {
+    if (reply.serverAnswered) {
       if (firstLaunch) await vault.writeRoute(CrestRoute.native);
       return const OpenNative();
     }
 
-    return firstLaunch ? const Unreachable() : const OpenNative();
+    // Transport failure — we could NOT reach the config endpoint and we
+    // have no cached decision.  The routing decision requires the
+    // config: no config, no decision.  Show no-wifi; a later retry
+    // (or the connectivity auto-resume) will run the pipeline again.
+    return const Unreachable();
   }
 
   CrestDestination _wrapPortal(String url) {
@@ -128,11 +144,7 @@ class CrestCoordinator {
 
   // ── returning portal user ────────────────────────────────────────────
   Future<CrestDestination> _returningPortal() async {
-    final online = await probe.online();
-    if (!online) return const Unreachable();
-
-    // Try a fresh POST first — the endpoint may have rotated the partner
-    // host.  If it fails, fall back to the saved URL only if still valid.
+    // Online check already happened in `_decide`.
     unawaited(signals.warmUp());
     unawaited(signals.awaitSignals(timeout: const Duration(seconds: 3)));
 
@@ -148,41 +160,43 @@ class CrestCoordinator {
       return _wrapPortal(reply.destination!);
     }
 
-    final saved = await vault.readDestination();
-    if (saved != null) return _wrapPortal(saved);
-
-    // The endpoint told us to stop showing the portal — respect that,
-    // flip to native.
-    if (reply.rawMessage != null && reply.rawMessage!.isNotEmpty) {
+    // Endpoint explicitly refused to grant a URL — respect the server
+    // decision and flip the route to native.
+    if (reply.serverAnswered) {
       await vault.writeRoute(CrestRoute.native);
       return const OpenNative();
     }
+
+    // Endpoint unreachable — try the last cached destination if still
+    // valid; otherwise no-wifi (we can't decide without the config).
+    final saved = await vault.readDestination();
+    if (saved != null) return _wrapPortal(saved);
     return const Unreachable();
   }
 
-  // ── returning native user ────────────────────────────────────────────
-  Future<CrestDestination> _returningNative() async {
-    if (!vault.organicRecheckDue) return const OpenNative();
+  // ── background recheck for native users ──────────────────────────────
+  Future<void> _backgroundRecheck() async {
+    try {
+      final online = await probe.online();
+      if (!online) return;
+      await signals.warmUp();
+      await signals.awaitSignals(timeout: const Duration(seconds: 4));
+      await vault.markOrganicReconversion();
 
-    final online = await probe.online();
-    if (!online) return const OpenNative(); // do not park in offline
-
-    unawaited(signals.warmUp());
-    await signals.awaitSignals(timeout: const Duration(seconds: 4));
-    await vault.markOrganicReconversion();
-
-    final locale = PlatformDispatcher.instance.locale.toString();
-    final pushToken = vault.pushToken;
-    final body = await signals.buildPayload(
-      pushToken: pushToken,
-      locale: locale,
-    );
-    final reply = await dispatch.post(body);
-    if (reply.hasDestination) {
-      await vault.writeRoute(CrestRoute.portal);
-      await vault.saveDestination(reply);
-      return _wrapPortal(reply.destination!);
+      final locale = PlatformDispatcher.instance.locale.toString();
+      final pushToken = vault.pushToken;
+      final body = await signals.buildPayload(
+        pushToken: pushToken,
+        locale: locale,
+      );
+      final reply = await dispatch.post(body);
+      if (reply.hasDestination) {
+        await vault.writeRoute(CrestRoute.portal);
+        await vault.saveDestination(reply);
+        crestLog(() => '[Crestway] background recheck → flipped to portal');
+      }
+    } on Object catch (error) {
+      crestLog(() => '[Crestway] background recheck failed: $error');
     }
-    return const OpenNative();
   }
 }

@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -16,6 +19,9 @@ class AirLostPage extends StatefulWidget {
 }
 
 class _AirLostPageState extends State<AirLostPage> {
+  StreamSubscription<List<ConnectivityResult>>? _netWatch;
+  bool _restored = false;
+
   @override
   void initState() {
     super.initState();
@@ -24,10 +30,35 @@ class _AirLostPageState extends State<AirLostPage> {
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
     ]);
+
+    // Auto-restore: the moment the OS reports a live interface again,
+    // slip the user back to the retry page (which normally rebuilds the
+    // portal at the exact URL they were on).  A manual tap on the Retry
+    // button still works and is the fallback when the stream misses.
+    _netWatch = Connectivity().onConnectivityChanged.listen((results) {
+      final anyUp =
+          results.any((r) => r != ConnectivityResult.none);
+      if (!anyUp || _restored || !mounted) return;
+      // 2.5 s settle: connectivity_plus fires the moment the interface
+      // is UP, but iOS's network stack (DNS, routing, TLS handshake to
+      // the config endpoint) needs another 1-2 s before HTTPS works
+      // reliably.  Retrying too early lands on a second no-wifi.
+      Future<void>.delayed(const Duration(milliseconds: 2500), () {
+        if (!mounted || _restored) return;
+        _retry();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _netWatch?.cancel();
+    super.dispose();
   }
 
   void _retry() {
-    if (!mounted) return;
+    if (!mounted || _restored) return;
+    _restored = true;
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: widget.retryPageBuilder),
     );
@@ -67,7 +98,7 @@ class _AirLostPageState extends State<AirLostPage> {
               ),
               Align(
                 alignment: landscape
-                    ? const Alignment(0, 0.55)
+                    ? const Alignment(0, 0.88)
                     : const Alignment(0, 0.72),
                 child: button,
               ),

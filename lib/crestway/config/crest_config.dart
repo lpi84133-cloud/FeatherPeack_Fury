@@ -50,10 +50,11 @@ abstract final class CrestConfig {
   static String get safariTail => unfurl(_safariTail);
 
   // Slot suffix.  The operator explicitly acknowledged the tail
-  //   `appid/<bundleId> appname/FeatherpeakFury`
+  //   `appid/id<storeNumericId> appname/FeatherpeakFury`
   // as required by the partner backend (`gray_user_agent.mdc` §2a step 3).
   // Both tokens are encoded, so no plaintext `appid/` or `appname/` string
-  // appears in the binary either.
+  // appears in the binary either.  The appid value uses the iOS store numeric
+  // id with the conventional `id` prefix, NOT the bundle id.
   static String get uaAppIdToken => unfurl(_uaAppIdToken);
   static String get uaAppNameToken => unfurl(_uaAppNameToken);
 

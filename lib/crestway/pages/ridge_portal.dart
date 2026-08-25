@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -8,6 +9,7 @@ import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 
 import '../config/crest_config.dart';
 import '../keep/boot_log.dart';
+import 'air_lost_page.dart';
 
 // Portal WebView.  The single JS injection bundle (`_installShell`) is
 // deliberately one file with one sentinel — a merged shape rather than
@@ -40,6 +42,12 @@ class _RidgePortalState extends State<RidgePortal>
   // the config URL and re-trigger the same chain.
   String? _lastTopUrl;
   DateTime? _lastReflow;
+  StreamSubscription<List<ConnectivityResult>>? _netWatch;
+  bool _leftForOffline = false;
+  // The cold-start-push reload is one-shot: we do it exactly once, on the
+  // first onPageFinished, then flip the flag so subsequent page loads
+  // (partner redirect chain) do not keep reloading and eating clicks.
+  bool _coldReloadPending = false;
 
   @override
   void initState() {
@@ -72,6 +80,25 @@ class _RidgePortalState extends State<RidgePortal>
       platform.setAllowsBackForwardNavigationGestures(true);
     }
 
+    // Watch for real connectivity loss AFTER the portal is open.
+    // Short 300 ms debounce — enough to ignore the momentary flap on
+    // background→foreground transitions, but small enough that the
+    // no-wifi screen appears essentially instantly when the user really
+    // pulls the plug (Wi-Fi + Cellular + VPN all off).
+    _netWatch = Connectivity().onConnectivityChanged.listen((results) {
+      final allGone = results.every((r) => r == ConnectivityResult.none);
+      if (!allGone || _leftForOffline || !mounted) return;
+      Future<void>.delayed(const Duration(milliseconds: 300), () async {
+        if (!mounted || _leftForOffline) return;
+        final fresh = await Connectivity().checkConnectivity();
+        final stillGone = fresh.every((r) => r == ConnectivityResult.none);
+        if (!stillGone || _leftForOffline || !mounted) return;
+        _goOffline();
+      });
+    });
+
+    _coldReloadPending = widget.coldStartPush;
+
     if (widget.coldStartPush) {
       _settleColdViewport();
     } else {
@@ -83,9 +110,27 @@ class _RidgePortalState extends State<RidgePortal>
 
   @override
   void dispose() {
+    _netWatch?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
+  }
+
+  void _goOffline() {
+    if (!mounted || _leftForOffline) return;
+    _leftForOffline = true;
+    final currentUrl = _lastTopUrl ?? widget.url;
+    final ua = widget.userAgent;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute<void>(
+        builder: (_) => AirLostPage(
+          retryPageBuilder: (_) => RidgePortal(
+            url: currentUrl,
+            userAgent: ua,
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -114,6 +159,13 @@ class _RidgePortalState extends State<RidgePortal>
   }
 
   NavigationDelegate get _delegate => NavigationDelegate(
+        onPageStarted: (_) async {
+          // Race-guard: install the click fix-up as early as possible so
+          // a fast user tap on a `target="_blank"` button does not get
+          // silently dropped by WKWebView between page render and our
+          // main injection in onPageFinished.  Idempotent.
+          await _rewriteBlankTargets();
+        },
         onNavigationRequest: (request) async {
           final uri = Uri.tryParse(request.url);
           if (uri == null) return NavigationDecision.prevent;
@@ -153,13 +205,22 @@ class _RidgePortalState extends State<RidgePortal>
           // infinite loop.
           _redirectAttempts = 0;
           await _installShell();
+          // Second-pass install: some pages inject their button DOM
+          // between our first-pass rewrite and the user's tap.  Idempotent
+          // (sentinel-guarded) — this catches any late-added `_blank`
+          // links that MutationObserver didn't fire for yet.
+          await _rewriteBlankTargets();
           if (mounted) setState(() {});
           Future.delayed(CrestConfig.postFinishedResizeDelay, () async {
             if (!mounted) return;
             await _controller.runJavaScript(
               "window.dispatchEvent(new Event('resize'));",
             );
-            if (widget.coldStartPush) {
+            if (_coldReloadPending) {
+              // One-shot: reload only the first page finish after a
+              // cold-start push, otherwise every hop in the partner
+              // redirect chain would reload itself and swallow taps.
+              _coldReloadPending = false;
               await _controller.reload();
             }
           });
@@ -170,6 +231,20 @@ class _RidgePortalState extends State<RidgePortal>
           final mainFrame = error.isForMainFrame ?? true;
           if (error.errorCode == -999) return; // cancelled
           if (!mainFrame) return;
+
+          // Real network death — WKWebView surfaces this before
+          // connectivity_plus does, especially when VPN drops.  Show
+          // the no-wifi screen immediately; retry restores the exact
+          // URL the user was on.
+          //   -1009 NSURLErrorNotConnectedToInternet
+          //   -1005 NSURLErrorNetworkConnectionLost
+          //   -1001 NSURLErrorTimedOut  (only if it stays offline)
+          if (error.errorCode == -1009 || error.errorCode == -1005) {
+            crestLog(() => '[Crestway] WV net-dead ${error.errorCode}');
+            _goOffline();
+            return;
+          }
+
           if (error.errorCode == -1007 &&
               _redirectAttempts < CrestConfig.redirectRetryLimit) {
             _redirectAttempts++;
@@ -183,6 +258,50 @@ class _RidgePortalState extends State<RidgePortal>
               '[Crestway] WV error code=${error.errorCode} desc=${error.description}');
         },
       );
+
+  // Compact idempotent fix-up for WKWebView's `_blank`/`window.open` drop.
+  // Runs both on onPageStarted (before user can tap) and again after
+  // onPageFinished (once the DOM is stable) — the sentinel guards it.
+  Future<void> _rewriteBlankTargets() async {
+    if (!mounted) return;
+    const snippet = r'''
+(function(){
+  try {
+    var doc = document;
+    if (!doc || !doc.documentElement) return;
+    function fix(){
+      var links = doc.querySelectorAll('a[target="_blank"], a[target="_new"]');
+      for (var i=0;i<links.length;i++) links[i].setAttribute('target','_self');
+      var forms = doc.querySelectorAll('form[target="_blank"], form[target="_new"]');
+      for (var j=0;j<forms.length;j++) forms[j].setAttribute('target','_self');
+    }
+    fix();
+    if (!window.__pFPOpen) {
+      window.__pFPOpen = 1;
+      try {
+        window.open = function(u){
+          if (u) { try { window.location.href = String(u); } catch(_){} }
+          return null;
+        };
+      } catch(_){}
+    }
+    if (!window.__pFPMo && (doc.body || doc.documentElement)) {
+      window.__pFPMo = 1;
+      try {
+        new MutationObserver(fix).observe(doc.body || doc.documentElement,
+          {childList:true, subtree:true, attributes:true, attributeFilter:['target']});
+      } catch(_){}
+    }
+  } catch(_){}
+})();
+''';
+    try {
+      await _controller.runJavaScript(snippet);
+    } catch (_) {
+      // Runs before DOM in some flows — safe to ignore, the next call
+      // (from the other hook) will succeed.
+    }
+  }
 
   Future<void> _launchExternal(Uri uri) async {
     try {

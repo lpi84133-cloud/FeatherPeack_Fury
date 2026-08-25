@@ -11,17 +11,18 @@ class AirProbe {
   const AirProbe();
 
   Future<bool> online({
-    Duration coldSettle = const Duration(milliseconds: 900),
+    Duration coldSettle = const Duration(milliseconds: 1500),
   }) async {
     final connectivity = Connectivity();
     final results = await connectivity.checkConnectivity();
     if (!_isNone(results)) return true;
 
-    // Cold-boot: iOS occasionally reports `[none]` for the first few
-    // hundred ms before it enumerates Wi-Fi / Cellular.  Short 900 ms
-    // window with a mid-window recheck keeps the no-wifi verdict
-    // essentially instant when the user really is offline, while
-    // still catching the false-negative flap on a warm boot.
+    // Cold-boot: iOS commonly reports `[none]` for up to ~1 s before it
+    // enumerates Wi-Fi / Cellular.  A 1.5 s window with two intermediate
+    // polls catches that flap while still giving a truly offline user a
+    // near-instant verdict.  This is the SINGLE source of truth for
+    // connectivity now — no parallel guard racing us to a false
+    // negative and causing a flash of no-wifi.
     return _awaitSignal(coldSettle);
   }
 

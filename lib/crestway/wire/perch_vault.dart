@@ -15,6 +15,7 @@ const _kSavedExpires = 'crestway.fp.saved_expires_ms';
 const _kPushToken    = 'crestway.fp.push_token';
 const _kPushSnooze   = 'crestway.fp.push_snooze_until_ms';
 const _kPushDeniedOs = 'crestway.fp.push_os_denied';
+const _kPushDecided  = 'crestway.fp.push_decision_made';
 const _kLastReconv   = 'crestway.fp.last_reconversion_ms';
 const _kBeacon       = 'crestway.fp.beacon_url';
 
@@ -71,7 +72,18 @@ class PerchVault {
 
   // ── push flags ───────────────────────────────────────────────────────
   bool get pushOsDenied => _prefs.getBool(_kPushDeniedOs) ?? false;
-  Future<void> markPushOsDenied() => _prefs.setBool(_kPushDeniedOs, true);
+  Future<void> markPushOsDenied() async {
+    await _prefs.setBool(_kPushDeniedOs, true);
+    await _prefs.setBool(_kPushDecided, true);
+  }
+
+  // True once the user has answered the invite (Accept or Skip does NOT
+  // set this — only Accept, or an OS-level Deny).  Used by `_wrapPortal`
+  // to skip re-showing the invite every launch after the user has
+  // already accepted push notifications.
+  bool get pushDecisionMade => _prefs.getBool(_kPushDecided) ?? false;
+  Future<void> markPushDecisionMade() =>
+      _prefs.setBool(_kPushDecided, true);
 
   bool get inviteSnoozed {
     final until = _prefs.getInt(_kPushSnooze) ?? 0;

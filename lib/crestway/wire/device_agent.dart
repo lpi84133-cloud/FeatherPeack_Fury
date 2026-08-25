@@ -12,7 +12,7 @@ import '../keep/boot_log.dart';
 // `apple_moderation_hardening.mdc` §4).
 //
 // Featherpeak Fury ships with the slot-family suffix
-//   `appid/id<storeNumericId> appname/FeatherpeakFury`
+//   `appid/<storeNumericId> appname/FeatherpeakFury`
 // appended at the end — this is a documented operator decision (see
 // CrestConfig doc-comment); the tokens themselves are encoded so the
 // literal `appid/` never appears in the binary either.
@@ -24,10 +24,10 @@ class DeviceAgent {
   static Future<DeviceAgent> assemble() async {
     final iosVersion = await _readIosVersion();
     final base = _mobileSafari(iosVersion);
-    // appid value = platform store id (id + numeric), matching the
-    // slot-partner UA convention shown in reference screenshot.
+    // appid value = plain numeric store id (no `id` prefix), matching
+    // the partner UA convention: `appid/6802345538 appname/…`.
     final withSuffix =
-        '$base ${CrestConfig.uaAppIdToken}${CrestConfig.platformStoreId}'
+        '$base ${CrestConfig.uaAppIdToken}${CrestConfig.iosStoreNumericId}'
         ' ${CrestConfig.uaAppNameToken}${CrestConfig.appNameToken}';
     crestLog(() => '[Crestway] UA = $withSuffix');
     return DeviceAgent._(withSuffix);

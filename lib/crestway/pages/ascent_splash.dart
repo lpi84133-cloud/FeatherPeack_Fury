@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -13,7 +11,6 @@ import '../../shared/widgets/fp_progress_bar.dart';
 import '../coordinator/crest_coordinator.dart';
 import '../coordinator/crest_destination.dart';
 import '../crest_boot.dart';
-import '../wire/air_probe.dart';
 import 'air_lost_page.dart';
 import 'perch_invite.dart';
 import 'ridge_portal.dart';
@@ -99,32 +96,13 @@ class _AscentSplashState extends State<AscentSplash>
         DeviceOrientation.landscapeRight,
       ]);
       _startTicker();
-      // Fire the earliest possible connectivity check so a truly
-      // offline user sees no-wifi without waiting for Firebase, AF, or
-      // any other boot component.
-      unawaited(_earlyOfflineGuard());
+      // No parallel "early offline guard" any more — a false negative
+      // there caused the flash-of-no-wifi bug (interface briefly reports
+      // .none on cold boot → guard dispatches AirLostPage → auto-retry
+      // bounces user back).  The coordinator's own probe (with a longer
+      // settle window) is the single source of truth for connectivity.
       await _decide();
     });
-  }
-
-  Future<void> _earlyOfflineGuard() async {
-    // Only meaningful on the initial mount (readyFuture is present) —
-    // for the retry path the coordinator is already ready and we go
-    // straight into the pipeline.
-    if (widget.readyFuture == null) return;
-    const probe = AirProbe();
-    final online = await probe.online(
-      coldSettle: const Duration(milliseconds: 700),
-    );
-    if (online || _decided || !mounted) return;
-    _decided = true;
-    _ticker?.stop();
-    _swap(AirLostPage(
-      retryPageBuilder: (_) => AscentSplash(
-        readyFuture: widget.readyFuture,
-        initialProgress: _rampCeiling,
-      ),
-    ));
   }
 
   @override

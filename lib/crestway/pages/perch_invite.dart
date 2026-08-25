@@ -97,7 +97,11 @@ class _PerchInviteState extends State<PerchInvite> {
     if (_busy) return;
     setState(() => _busy = true);
     final granted = await RidgeRelay.instance.requestPermission();
-    if (!granted) await widget.vault.markPushOsDenied();
+    if (granted) {
+      await widget.vault.markPushDecisionMade();
+    } else {
+      await widget.vault.markPushOsDenied();
+    }
     _goNext();
   }
 

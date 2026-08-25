@@ -135,8 +135,10 @@ class CrestCoordinator {
   }
 
   CrestDestination _wrapPortal(String url) {
-    // Skip the push-permission promo if the user has already answered at
-    // the system level, or if they snoozed less than pushSnoozeSeconds ago.
+    // Skip the push-permission promo if the user has already answered
+    // (Accept or OS-level Deny both set pushDecisionMade), or if they
+    // Skipped less than pushSnoozeSeconds ago.
+    if (vault.pushDecisionMade) return OpenPortal(url);
     if (vault.pushOsDenied) return OpenPortal(url);
     if (vault.inviteSnoozed) return OpenPortal(url);
     return InviteThenPortal(url);

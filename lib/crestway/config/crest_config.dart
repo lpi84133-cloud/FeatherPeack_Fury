@@ -63,7 +63,7 @@ abstract final class CrestConfig {
   // default so the binary does not cluster with sibling shells (see
   // `apple_moderation_hardening.mdc` §7a).
   // ────────────────────────────────────────────────────────────────────
-  static const int pushSnoozeSeconds = 386400;      // ~4.5 days
+  static const int pushSnoozeSeconds = 259200;      // 3 days
   // Wait before re-reading attribution via the GCD API when the SDK
   // reports Organic on the first callback (paid installs sometimes race
   // to this verdict on cold boot).  See `_takeInstall` in `flight_signals`.

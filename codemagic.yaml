@@ -1,0 +1,65 @@
+workflows:
+  ios-release:
+    name: iOS Release
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.featherpeakfury.featherpeakfurygame
+      flutter: default
+      xcode: latest
+      cocoapods: default
+      vars:
+        # Add GOOGLE_SERVICES_IOS in Codemagic → App Settings →
+        # Environment variables as a secret variable containing the
+        # base64-encoded content of GoogleService-Info.plist:
+        #   base64 -i ios/Runner/GoogleService-Info.plist | pbcopy
+        GOOGLE_SERVICES_IOS: $GOOGLE_SERVICES_IOS
+
+    scripts:
+      # Firebase поставляется через CocoaPods; Flutter SPM и CocoaPods
+      # одновременно дублируют Firebase → "Redefinition of module".
+      # Отключаем SPM до любого pub get.
+      - name: Disable Swift Package Manager
+        script: |
+          flutter config --no-enable-swift-package-manager
+
+      # Восстанавливаем GoogleService-Info.plist из зашифрованной
+      # переменной окружения.  Файл в .gitignore — в репозиторий
+      # не попадает, но Codemagic подставляет его через env var.
+      - name: Restore GoogleService-Info.plist
+        script: |
+          echo "$GOOGLE_SERVICES_IOS" | base64 --decode \
+            > ios/Runner/GoogleService-Info.plist
+
+      - name: Get Flutter packages
+        script: flutter pub get
+
+      # Вычищаем SPM-артефакты, которые могли просочиться.
+      - name: Purge any leftover SPM artifacts
+        script: |
+          rm -rf ios/Flutter/ephemeral/Packages
+          rm -rf build/ios/SourcePackages 2>/dev/null || true
+          find ios -name "Package.swift" -delete 2>/dev/null || true
+
+      - name: Pod install
+        script: |
+          cd ios
+          pod deintegrate || true
+          pod install --repo-update
+
+      - name: Build IPA
+        script: |
+          flutter build ipa --release \
+            --export-options-plist=/Users/builder/export_options.plist
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true

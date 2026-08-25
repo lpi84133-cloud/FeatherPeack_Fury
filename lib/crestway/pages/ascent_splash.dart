@@ -159,16 +159,19 @@ class _AscentSplashState extends State<AscentSplash>
     // step (ATT 420 ms, AF signals 12 s, dispatch 2 × 11 s), but if one
     // of the futures wedges (SDK never fires its callback, TLS stack
     // hangs on a bad partner network) the user must not be stuck on
-    // 35 %.  22 s covers the worst legit case with margin; past that we
-    // fall back to the native game — same shape as HenheavenDash
-    // `WarmupGate._lastResort`.
+    // 35 %.  22 s covers the worst legit case with margin; past that
+    // we decide the fallback based on whether the interface is still
+    // up — offline → no-wifi (user probably toggled Wi-Fi off while
+    // the pipeline ran), online → native game.
     CrestDestination destination;
     try {
       destination = await coordinator.decide().timeout(
         const Duration(seconds: 22),
       );
     } on TimeoutException {
-      destination = const OpenNative();
+      final stillOnline = await coordinator.probe.online();
+      destination =
+          stillOnline ? const OpenNative() : const Unreachable();
     }
     if (!mounted || _decided) return;
     // Remember the resolved values so `_dispatch` can use them.

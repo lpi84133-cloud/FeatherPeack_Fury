@@ -131,19 +131,22 @@ class CrestCoordinator {
       return _wrapPortal(reply.destination!);
     }
 
-    // We already passed the interface check in `_decide()` — the device
-    // IS online.  Any "no destination" outcome (server said `ok:false`,
-    // 4xx/5xx, malformed JSON, transport failure) means the user goes
-    // to the native game.  Showing no-wifi here would create an infinite
-    // retry loop while internet is fine — see the fantik-install bug in
-    // `gray_flow_lessons.md` and the equivalent HenheavenDash
-    // `_firstDecision` fallback (`DinerTarget`).  We only commit the
-    // native route persistently when the server *explicitly* answered
-    // (so a transport hiccup on the very first launch does not lock a
-    // paid-install user into the game forever).
+    // Server explicitly answered (2xx or 4xx with a valid JSON body but
+    // `ok:false`) — commit the native route persistently.  Fantik-style
+    // first launches take this branch when the endpoint intentionally
+    // refuses to hand back a URL.
     if (firstLaunch && reply.serverAnswered) {
       await vault.writeRoute(CrestRoute.native);
+      return const OpenNative();
     }
+
+    // Transport failure.  The interface WAS up at the start of
+    // `_decide()` — but pipelines can span 20+ s (ATT prompt + AF +
+    // dispatch retries) and the user might have toggled Wi-Fi off in
+    // that window.  Re-probe now: if the interface is dead, honour
+    // that and show no-wifi; otherwise fall back to the native game so
+    // a bad-server case doesn't lock the user out.
+    if (!await probe.online()) return const Unreachable();
     return const OpenNative();
   }
 

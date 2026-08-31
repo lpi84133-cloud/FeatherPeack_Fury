@@ -84,9 +84,6 @@ class AppSettings {
     this.soundEnabled = true,
     this.hapticsEnabled = true,
     this.onboardingSeen = false,
-    this.remindersEnabled = false,
-    this.reminderHour = 8,
-    this.reminderMinute = 0,
   });
 
   final DistanceUnit distanceUnit;
@@ -99,15 +96,6 @@ class AppSettings {
   final bool soundEnabled;
   final bool hapticsEnabled;
   final bool onboardingSeen;
-
-  /// Whether the user has opted into daily reminders.
-  final bool remindersEnabled;
-
-  /// Hour of day (0–23) the daily reminder fires.
-  final int reminderHour;
-
-  /// Minute (0–59) the daily reminder fires.
-  final int reminderMinute;
 
   static const currencyChoices = <String>[r'$', '€', '£', '¥', 'CHF', 'kr'];
 
@@ -122,9 +110,6 @@ class AppSettings {
     bool? soundEnabled,
     bool? hapticsEnabled,
     bool? onboardingSeen,
-    bool? remindersEnabled,
-    int? reminderHour,
-    int? reminderMinute,
   }) {
     return AppSettings(
       distanceUnit: distanceUnit ?? this.distanceUnit,
@@ -137,9 +122,6 @@ class AppSettings {
       soundEnabled: soundEnabled ?? this.soundEnabled,
       hapticsEnabled: hapticsEnabled ?? this.hapticsEnabled,
       onboardingSeen: onboardingSeen ?? this.onboardingSeen,
-      remindersEnabled: remindersEnabled ?? this.remindersEnabled,
-      reminderHour: reminderHour ?? this.reminderHour,
-      reminderMinute: reminderMinute ?? this.reminderMinute,
     );
   }
 
@@ -154,9 +136,6 @@ class AppSettings {
     'soundEnabled': soundEnabled,
     'hapticsEnabled': hapticsEnabled,
     'onboardingSeen': onboardingSeen,
-    'remindersEnabled': remindersEnabled,
-    'reminderHour': reminderHour,
-    'reminderMinute': reminderMinute,
   };
 
   factory AppSettings.fromJson(Map<dynamic, dynamic> json) {
@@ -195,9 +174,6 @@ class AppSettings {
       soundEnabled: json['soundEnabled'] as bool? ?? true,
       hapticsEnabled: json['hapticsEnabled'] as bool? ?? true,
       onboardingSeen: json['onboardingSeen'] as bool? ?? false,
-      remindersEnabled: json['remindersEnabled'] as bool? ?? false,
-      reminderHour: (json['reminderHour'] as num?)?.toInt() ?? 8,
-      reminderMinute: (json['reminderMinute'] as num?)?.toInt() ?? 0,
     );
   }
 }

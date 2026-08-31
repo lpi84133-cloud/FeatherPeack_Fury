@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/app_info.dart';
 import '../../core/audio/fp_feedback.dart';
-import '../../core/notifications/fp_reminder_service.dart';
 import '../../core/design/fp_colors.dart';
 import '../../core/design/fp_images.dart';
 import '../../core/design/fp_tokens.dart';
@@ -44,54 +43,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (mounted) setState(() => _usedBytes = bytes);
   }
 
-  Future<void> _toggleReminders(bool enabled) async {
-    final controller = ref.read(settingsProvider.notifier);
-    final settings = ref.read(settingsProvider);
-
-    if (!enabled) {
-      await controller.setRemindersEnabled(false);
-      await FpReminderService.cancel();
-      return;
-    }
-
-    final granted = await FpReminderService.requestPermission();
-    if (!granted) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Allow notifications for Featherpeak Fury in your device Settings.',
-          ),
-        ),
-      );
-      return;
-    }
-
-    await controller.setRemindersEnabled(true);
-    await FpReminderService.schedule(
-      settings.reminderHour,
-      settings.reminderMinute,
-    );
-  }
-
-  Future<void> _pickReminderTime() async {
-    final settings = ref.read(settingsProvider);
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay(
-        hour: settings.reminderHour,
-        minute: settings.reminderMinute,
-      ),
-      helpText: 'Reminder time',
-    );
-    if (picked == null) return;
-    final controller = ref.read(settingsProvider.notifier);
-    await controller.setReminderTime(picked.hour, picked.minute);
-    if (settings.remindersEnabled) {
-      await FpReminderService.schedule(picked.hour, picked.minute);
-    }
-  }
-
   Future<void> _deleteAllData() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -116,7 +67,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
     if (confirmed != true) return;
 
-    await FpReminderService.cancel();
     await ref.read(tripsProvider.notifier).deleteAll();
     await ref.read(profileProvider.notifier).removeAvatar();
     await FpStorage.clearAll();
@@ -287,66 +237,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
           const SizedBox(height: FpSpace.md),
-          const FpSectionHeader(label: 'Notifications'),
-          const SizedBox(height: FpSpace.xs),
-          FpCard(
-            padding: const EdgeInsets.symmetric(horizontal: FpSpace.sm),
-            child: Column(
-              children: [
-                FpSwitchRow(
-                  label: 'Daily reminder',
-                  description:
-                      'A short nudge each day to keep your trip plans up '
-                      'to date. No account required.',
-                  value: settings.remindersEnabled,
-                  onChanged: _toggleReminders,
-                ),
-                if (settings.remindersEnabled) ...[
-                  const Divider(height: 1),
-                  InkWell(
-                    onTap: _pickReminderTime,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: FpSpace.sm,
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.schedule_rounded,
-                            size: 18,
-                            color: FpColors.graphiteSoft,
-                          ),
-                          const SizedBox(width: FpSpace.xs),
-                          Expanded(
-                            child: Text(
-                              'Reminder time',
-                              style: FpTypography.body,
-                            ),
-                          ),
-                          Text(
-                            TimeOfDay(
-                              hour: settings.reminderHour,
-                              minute: settings.reminderMinute,
-                            ).format(context),
-                            style: FpTypography.bodyStrong.copyWith(
-                              color: FpColors.forest,
-                            ),
-                          ),
-                          const SizedBox(width: FpSpace.xs),
-                          const Icon(
-                            Icons.chevron_right_rounded,
-                            size: 18,
-                            color: FpColors.graphiteSoft,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(height: FpSpace.md),
           const FpSectionHeader(label: 'Data and storage'),
           const SizedBox(height: FpSpace.xs),
           FpCard(
@@ -373,7 +263,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 const SizedBox(height: FpSpace.sm),
                 OutlinedButton.icon(
                   onPressed: () async {
-                    await FpReminderService.cancel();
                     await controller.resetToDefaults();
                     FpFeedback.instance.success(FpSound.successfulAction);
                     if (!context.mounted) return;

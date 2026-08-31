@@ -60,12 +60,6 @@ class SettingsController extends Notifier<AppSettings> {
   Future<void> setHapticsEnabled(bool value) =>
       _write(state.copyWith(hapticsEnabled: value));
 
-  Future<void> setRemindersEnabled(bool value) =>
-      _write(state.copyWith(remindersEnabled: value));
-
-  Future<void> setReminderTime(int hour, int minute) =>
-      _write(state.copyWith(reminderHour: hour, reminderMinute: minute));
-
   Future<void> completeOnboarding() =>
       _write(state.copyWith(onboardingSeen: true));
 

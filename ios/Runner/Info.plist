@@ -28,8 +28,6 @@
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>NSUserTrackingUsageDescription</key>
-	<string>Featherpeak Fury uses your device identifier only to understand which campaign led you to the app, so we can improve how it is offered.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Featherpeak Fury opens the camera only when you choose to take a new profile photo. The photo is saved on this device and is never uploaded.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

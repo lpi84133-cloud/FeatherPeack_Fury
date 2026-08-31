@@ -5,6 +5,7 @@ import 'package:featherpeakfurygame/domain/calc/difficulty.dart';
 import 'package:featherpeakfurygame/domain/calc/food_estimate.dart';
 import 'package:featherpeakfurygame/domain/calc/fury_zones.dart';
 import 'package:featherpeakfurygame/domain/calc/load_breakdown.dart';
+import 'package:featherpeakfurygame/domain/calc/moving_time_estimate.dart';
 import 'package:featherpeakfurygame/domain/calc/peak_profile.dart';
 import 'package:featherpeakfurygame/domain/calc/trip_analysis.dart';
 import 'package:featherpeakfurygame/domain/models/hiker_profile.dart';
@@ -199,6 +200,36 @@ void main() {
         _trip(movingMinutes: 480, intensity: Intensity.veryHigh),
       )!;
       expect(hard.totalUnits, greaterThan(moderate.totalUnits));
+    });
+  });
+
+  group('moving time estimate', () {
+    test('needs a distance before it speaks', () {
+      expect(MovingTimeEstimate.of(_trip(elevationGainM: 800)), isNull);
+      expect(MovingTimeEstimate.of(_trip(distanceKm: 0)), isNull);
+    });
+
+    test('distance alone is 5 km per hour', () {
+      final result = MovingTimeEstimate.of(_trip(distanceKm: 10))!;
+      expect(result.minutes, 120);
+      expect(result.includesClimb, isFalse);
+    });
+
+    test('climb adds one hour per 600 m', () {
+      final result = MovingTimeEstimate.of(
+        _trip(distanceKm: 10, elevationGainM: 600),
+      )!;
+      expect(result.minutes, 180);
+      expect(result.includesClimb, isTrue);
+    });
+
+    test('a plan well under the baseline is optimistic', () {
+      final result = MovingTimeEstimate.of(
+        _trip(distanceKm: 10, elevationGainM: 600),
+      )!;
+      expect(result.isOptimistic(120), isTrue);
+      expect(result.isOptimistic(180), isFalse);
+      expect(result.isOptimistic(null), isFalse);
     });
   });
 

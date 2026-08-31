@@ -5,7 +5,7 @@ abstract final class AppInfo {
   static const tagline = 'Offline trip preparation';
 
   /// Kept in step with the `version` field in pubspec.yaml.
-  static const version = '1.0.3';
+  static const version = '1.0.0';
 
   static const appStoreId = '6802345538';
   static const appStoreUrl = 'https://apps.apple.com/app/id$appStoreId';

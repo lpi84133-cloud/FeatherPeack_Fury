@@ -1,18 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/audio/fp_feedback.dart';
 import '../../core/design/fp_colors.dart';
 import '../../core/design/fp_images.dart';
 import '../../core/design/fp_tokens.dart';
 import '../../core/design/fp_typography.dart';
 import '../../data/providers.dart';
 import '../../domain/calc/difficulty.dart';
+import '../../domain/calc/moving_time_estimate.dart';
 import '../../domain/calc/trip_analysis.dart';
 import '../../shared/widgets/fp_card.dart';
 import '../../shared/widgets/fp_empty_state.dart';
 import '../../shared/widgets/fp_gauge.dart';
 import '../../shared/widgets/fp_metric.dart';
 import '../../shared/widgets/fp_section_header.dart';
+import '../../shared/widgets/fp_art.dart';
+import '../../domain/models/trip.dart';
 import '../trip/create_trip_screen.dart';
 
 Color difficultyColor(DifficultyTier tier) => switch (tier) {
@@ -134,6 +138,7 @@ class RouteAnalyzerView extends ConsumerWidget {
             ],
           ),
         ),
+        _PaceCard(trip: trip),
         const SizedBox(height: FpSpace.md),
         const FpSectionHeader(label: 'Factor contribution'),
         const SizedBox(height: FpSpace.xs),
@@ -195,6 +200,105 @@ class RouteAnalyzerView extends ConsumerWidget {
               'This score is a preparation aid based on the numbers you entered. '
               'It is not a medical, rescue or professional route assessment.',
           icon: Icons.shield_outlined,
+        ),
+      ],
+    );
+  }
+}
+
+/// Typical moving time from Naismith's rule, shown against the time the user
+/// entered. Informational only: slower than typical is never flagged.
+class _PaceCard extends ConsumerWidget {
+  const _PaceCard({required this.trip});
+
+  final Trip trip;
+
+  Future<void> _openParameters(BuildContext context) async {
+    FpFeedback.instance.play(FpSound.screenOpen);
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => CreateTripScreen(existing: trip)),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final estimate = MovingTimeEstimate.of(trip);
+    if (estimate == null) return const SizedBox.shrink();
+
+    final format = ref.watch(formatProvider);
+    final entered = trip.movingMinutes;
+    final hasEntry = entered != null && entered > 0;
+    final optimistic = estimate.isOptimistic(entered);
+    final share = !hasEntry
+        ? 0.0
+        : (entered / estimate.minutes).clamp(0.0, 1.0);
+
+    final Color barColor;
+    final String verdict;
+    if (!hasEntry) {
+      barColor = FpColors.outlineStrong;
+      verdict = 'Not entered';
+    } else if (optimistic) {
+      barColor = FpColors.goldDeep;
+      verdict = 'Optimistic';
+    } else {
+      barColor = FpColors.forestSoft;
+      verdict = 'In range';
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: FpSpace.md),
+        const FpSectionHeader(label: 'Typical time'),
+        const SizedBox(height: FpSpace.xs),
+        FpCard(
+          onTap: () => _openParameters(context),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('NAISMITH', style: FpTypography.overline),
+                        Text(
+                          format.duration(estimate.minutes),
+                          style: FpTypography.metricSmall,
+                        ),
+                        Text(
+                          estimate.includesClimb
+                              ? '5 km/h + 1 h / 600 m climb'
+                              : '5 km/h on the flat — add elevation for climb',
+                          style: FpTypography.caption,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const FpArt(FpImages.markerAscentSign, size: 40, height: 48),
+                ],
+              ),
+              const SizedBox(height: FpSpace.sm),
+              FpShareBar(share: share, color: barColor, height: 6),
+              const SizedBox(height: FpSpace.xs),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      hasEntry
+                          ? 'Planned: ${format.duration(entered)}'
+                          : 'No moving time entered yet',
+                      style: FpTypography.caption,
+                    ),
+                  ),
+                  FpTag(label: verdict, color: barColor),
+                ],
+              ),
+            ],
+          ),
         ),
       ],
     );

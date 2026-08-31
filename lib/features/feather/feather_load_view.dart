@@ -44,6 +44,7 @@ class FeatherLoadView extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref, {
     GearItem? existing,
+    GearCategory? initialCategory,
   }) async {
     final format = ref.read(formatProvider);
     final result = await showModalBottomSheet<GearItem>(
@@ -51,6 +52,7 @@ class FeatherLoadView extends ConsumerWidget {
       isScrollControlled: true,
       builder: (context) => _GearSheet(
         existing: existing,
+        initialCategory: initialCategory,
         weightSymbol: format.weightSymbol,
         toKg: format.weightToKg,
         fromKg: format.kgToWeight,
@@ -134,6 +136,18 @@ class FeatherLoadView extends ConsumerWidget {
               ),
             ),
             _WaterCard(analysis: analysis),
+            if (!trip.gear.any((item) => item.category == GearCategory.health) &&
+                trip.hasLoadData)
+              _FirstAidHint(
+                onAdd: () {
+                  FpFeedback.instance.play(FpSound.menuOpen);
+                  _editItem(
+                    context,
+                    ref,
+                    initialCategory: GearCategory.health,
+                  );
+                },
+              ),
             if (load.totalKg == 0) ...[
               const SizedBox(height: FpSpace.md),
               FpCard(
@@ -358,6 +372,51 @@ class _WaterCard extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Quiet reminder that first aid is not on the list. Disappears as soon as
+/// anything in that category is added — no score, no warning colour.
+class _FirstAidHint extends StatelessWidget {
+  const _FirstAidHint({required this.onAdd});
+
+  final VoidCallback onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: FpSpace.md),
+      child: FpCard(
+        onTap: onAdd,
+        padding: const EdgeInsets.symmetric(
+          horizontal: FpSpace.sm,
+          vertical: FpSpace.sm,
+        ),
+        child: Row(
+          children: [
+            const FpArt(FpImages.categoryHealth, size: 36, height: 40),
+            const SizedBox(width: FpSpace.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('First aid', style: FpTypography.bodyStrong),
+                  Text(
+                    'Not on the list yet — optional, add a kit when you itemise.',
+                    style: FpTypography.caption,
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.add_rounded,
+              size: 18,
+              color: FpColors.graphiteSoft,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -612,9 +671,11 @@ class _GearSheet extends StatefulWidget {
     required this.toKg,
     required this.fromKg,
     this.existing,
+    this.initialCategory,
   });
 
   final GearItem? existing;
+  final GearCategory? initialCategory;
   final String weightSymbol;
   final double Function(double) toKg;
   final double Function(double) fromKg;
@@ -628,7 +689,9 @@ class _GearSheetState extends State<_GearSheet> {
     text: widget.existing?.name ?? '',
   );
   late GearCategory _category =
-      widget.existing?.category ?? GearCategory.equipment;
+      widget.existing?.category ??
+      widget.initialCategory ??
+      GearCategory.equipment;
   late double? _weight = widget.existing == null
       ? null
       : widget.fromKg(widget.existing!.weightKg);
